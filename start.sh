@@ -37,6 +37,8 @@ echo "[3/7] PyTorch (CUDA 12.1) + libs"
 pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
 pip install requests google-api-python-client google-auth-httplib2 google-auth-oauthlib realesrgan
 
+pip install Pillow
+
 echo "[4/7] ComfyUI setup"
 if [[ ! -d "$COMFY_DIR" ]]; then
   git clone --depth=1 https://github.com/comfyanonymous/ComfyUI "$COMFY_DIR"
