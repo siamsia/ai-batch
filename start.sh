@@ -43,7 +43,7 @@ if [[ ! -d "$COMFY_DIR" ]]; then
 fi
 pip install -r "$COMFY_DIR/requirements.txt"
 
-echo "[5/7] Models (SD1.5)"
+echo "[5/7] Models (SD1.5 default)"
 cd "$MODEL_DIR"
 if [[ ! -f "v1-5-pruned-emaonly.safetensors" ]]; then
   wget -O v1-5-pruned-emaonly.safetensors \
@@ -51,8 +51,6 @@ if [[ ! -f "v1-5-pruned-emaonly.safetensors" ]]; then
 fi
 
 echo "[6/7] Pull latest app scripts from GitHub"
-# ต้องแก้ GITHUB_USER ให้เป็นของคุณเอง ก่อนเอา one-liner ไปใช้
-#GITHUB_USER="${GITHUB_USER:-YOUR_GITHUB_USERNAME}"
 GITHUB_USER="${GITHUB_USER:-siamsia}"
 RAW="https://raw.githubusercontent.com/${GITHUB_USER}/ai-batch/main"
 curl -fsSL "$RAW/automation.py" -o "$APP_DIR/automation.py"
@@ -60,23 +58,25 @@ curl -fsSL "$RAW/run_batch.sh"   -o /workspace/run_batch.sh
 curl -fsSL "$RAW/flags.sh"       -o /workspace/flags.sh
 chmod +x /workspace/run_batch.sh /workspace/flags.sh
 
+# [NEW] ดูแล token.json ให้ปลอดภัยเสมอ
+mkdir -p "$CFG_DIR"
+if [[ -f "$CFG_DIR/token.json" ]]; then
+  chmod 600 "$CFG_DIR/token.json" || true
+fi
+
 echo "[7/7] Start ComfyUI (if not running) + run batch"
-# start ComfyUI once in tmux session
 if ! pgrep -f "ComfyUI/main.py" >/dev/null 2>&1; then
   tmux new-session -d -s comfy "cd $COMFY_DIR && \
     $VENVDIR/bin/python main.py --listen 127.0.0.1 --port $PORT \
     >> $LOG_DIR/comfy.log 2>&1"
 fi
 
-# ให้ PROMPT_API_BASE มีค่าเสมอ
 export PROMPT_API_BASE="${PROMPT_API_BASE:-$PROMPT_API_BASE_DEFAULT}"
-
-# รันงานหนึ่งรอบใน tmux (ดู log ได้)
 tmux new-session -d -s batch "$VENVDIR/bin/python $APP_DIR/automation.py \
   >> $LOG_DIR/batch.log 2>&1"
 
 echo "=== READY ===
 - Logs: tail -f $LOG_DIR/batch.log
-- Flags helper: /workspace/flags.sh {enable-startup|disable-startup|cancel-on|cancel-off|no-shutdown-on|no-shutdown-off|status}
-- Run batch again: /workspace/run_batch.sh
+- Flags: /workspace/flags.sh {enable-startup|disable-startup|cancel-on|cancel-off|no-shutdown-on|no-shutdown-off|status}
+- Re-run: /workspace/run_batch.sh
 "
