@@ -52,7 +52,8 @@ fi
 
 echo "[6/7] Pull latest app scripts from GitHub"
 # ต้องแก้ GITHUB_USER ให้เป็นของคุณเอง ก่อนเอา one-liner ไปใช้
-GITHUB_USER="${GITHUB_USER:-YOUR_GITHUB_USERNAME}"
+#GITHUB_USER="${GITHUB_USER:-YOUR_GITHUB_USERNAME}"
+GITHUB_USER="${GITHUB_USER:-siamsia}"
 RAW="https://raw.githubusercontent.com/${GITHUB_USER}/ai-batch/main"
 curl -fsSL "$RAW/automation.py" -o "$APP_DIR/automation.py"
 curl -fsSL "$RAW/run_batch.sh"   -o /workspace/run_batch.sh
