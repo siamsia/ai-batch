@@ -110,30 +110,38 @@ def fetch_images(pid, save_to:Path):
                 except: time.sleep(1)
     return saved
 
-def convert_image(src_path:str, fmt:str="jpg", quality:int=95) -> str:
-    """แปลงภาพเป็นฟอร์แมตที่ต้องการ; คืน path ใหม่"""
+from PIL import Image
+
+def convert_image(src_path: str, fmt: str = "jpg", quality: int = 95, dst_path: str | None = None) -> str:
+    """
+    แปลงภาพไปยังฟอร์แมตที่ต้องการ และให้เลือกปลายทางไฟล์ได้
+    - src_path: แหล่งไฟล์
+    - fmt: 'jpg' หรือ 'png'
+    - quality: คุณภาพ JPG
+    - dst_path: เส้นทางไฟล์ปลายทาง (ถ้า None จะเขียนทับโฟลเดอร์เดียวกับ src)
+    """
     fmt = fmt.lower()
     src = Path(src_path)
     if fmt not in ("jpg", "jpeg", "png"):
-        return str(src)  # ไม่รู้จักฟอร์แมต -> ไม่แปลง
+        return str(src)
 
-    if fmt in ("jpg","jpeg"):
-        # แปลงเป็น JPG (RGB), ตัด alpha
-        dst = src.with_suffix(".jpg")
-        img = Image.open(src).convert("RGB")
+    if dst_path is None:
+        dst = src.with_suffix("." + ("jpg" if fmt in ("jpg","jpeg") else "png"))
+    else:
+        dst = Path(dst_path)
+
+    img = Image.open(src)
+    if fmt in ("jpg", "jpeg"):
+        img = img.convert("RGB")  # ตัด alpha
         img.save(dst, "JPEG", quality=int(quality))
-        return str(dst)
-
-    if fmt == "png":
-        # บังคับเป็น PNG (เผื่อกรณีอินพุตเป็น JPG)
-        dst = src.with_suffix(".png")
-        img = Image.open(src)
-        if img.mode in ("RGBA","P"):
-            img = img.convert("RGBA")  # คง alpha ถ้ามี
-        else:
+    else:
+        # PNG
+        if img.mode not in ("RGB", "RGBA"):
             img = img.convert("RGB")
         img.save(dst, "PNG", compress_level=4)
-        return str(dst)
+
+    return str(dst)
+
 
 # ====== Real-ESRGAN ======
 def upscale(src, dst, model_name, scale):
@@ -334,36 +342,45 @@ def main():
         if not imgs:
             print("[WARN] no image"); shutil.rmtree(tmp, ignore_errors=True); continue
 
-        src = imgs[0]; base = Path(src).stem
-
-        # ... หลังได้ `src` จาก ComfyUI แล้ว
+        src = imgs[0]
+        base = Path(src).stem
+        
         # 1) เลือกปลายทางอัปสเกลเป็น PNG เสมอ (เพื่อคงคุณภาพระหว่างทาง)
-        intermediate_png = OUT_DIR / f"{base}{OUT_SUFFIX}.png"
-
+        intermediate_png = OUT_DIR / f"{base}{OUT_SUFFIX}.png"  # อยู่ใน OUT_DIR
+        
         if UPSCALE:
-            # อัปสเกลเขียนเป็น .png ชั่วคราว
+            # อัปสเกล → เขียนไฟล์กลางเป็น PNG ใน OUT_DIR
             upscale(src, str(intermediate_png), UPSCALE_MODEL, UPSCALE_SCALE)
             work_path = str(intermediate_png)
         else:
-            # ไม่อัปสเกล -> ใช้ไฟล์ต้นทาง (มาจาก ComfyUI ส่วนใหญ่เป็น .png)
+            # ไม่อัปสเกล → ใช้ไฟล์ต้นฉบับ (อยู่ใน tmp/)
             work_path = src
-
-        # 2) แปลงเป็นปลายทางสุดท้ายตาม config
-        final_path = convert_image(work_path, FINAL_FMT, JPEG_QLT)  # ".jpg" หรือ ".png"
-
-        # 3) ฝัง metadata เฉพาะไฟล์สุดท้าย
+        
+        # 2) คำนวณชื่อไฟล์สุดท้ายใน OUT_DIR เสมอ
+        if FINAL_FMT in ("jpg", "jpeg"):
+            final_name = f"{base}{OUT_SUFFIX}.jpg" if UPSCALE else f"{base}.jpg"
+        else:
+            final_name = f"{base}{OUT_SUFFIX}.png" if UPSCALE else f"{base}.png"
+        final_path_outdir = OUT_DIR / final_name
+        
+        # 3) แปลงเขียนไปยัง OUT_DIR (แม้ src จะอยู่ใน tmp ก็ไม่เป็นไร)
+        final_path = convert_image(work_path, FINAL_FMT, JPEG_QLT, dst_path=str(final_path_outdir))
+        
+        # 4) ฝัง metadata ลง "ไฟล์สุดท้าย"
         embed_meta(final_path, title, kws)
         print("  - saved:", final_path)
-
-        # 4) จัดการไฟล์ชั่วคราวตามต้องการ
-        if not KEEP_TMP:
-            # ลบ PNG ขั้นกลาง (ถ้าไฟล์สุดท้ายไม่ใช่ไฟล์เดียวกับมัน)
+        
+        # 5) เก็บ/ลบไฟล์กลางตามนโยบาย
+        if UPSCALE and not KEEP_TMP:
             try:
-                if str(intermediate_png) != final_path and intermediate_png.exists():
+                if Path(final_path) != intermediate_png and intermediate_png.exists():
                     intermediate_png.unlink()
-            except: pass
-                
+            except:
+                pass
+        
         done.append(it.get("rowId"))
+        
+        # 6) เคลียร์โฟลเดอร์ชั่วคราว (ปลอดภัย เพราะไฟล์สุดท้ายอยู่ OUT_DIR แล้ว)
         shutil.rmtree(tmp, ignore_errors=True)
 
     if done:
