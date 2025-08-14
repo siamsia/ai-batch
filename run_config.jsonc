@@ -1,0 +1,41 @@
+{
+  // เอาไว้ใน /workspace/config/run_config.jsonc
+  // ===== เลือกโมเดล =====
+  "model": "SDXL",                       // "SDXL" | "SD15" | "CUSTOM"
+
+  // ===== ที่มาของโมเดล (สำหรับโหลดอัตโนมัติ) =====
+  "model_source": "AUTO",                // "AUTO" | "HUGGINGFACE" | "DIRECT"
+                                         // - AUTO: ใช้ค่าเริ่มต้นตาม "model" (SDXL/SD15) ที่ผมแมปไว้ให้
+                                         // - HUGGINGFACE: ระบุ hf_repo + hf_path (และ HF_TOKEN ถ้าจำเป็น)
+                                         // - DIRECT: ระบุ direct_url เป็นลิงก์ไฟล์ .safetensors
+
+  "model_filename": "sd_xl_base_1.0.safetensors", // ชื่อไฟล์ที่จะเก็บลง /workspace/models/checkpoints/
+                                                   // (เปลี่ยนชื่อได้ตามต้องการ)
+
+  // สำหรับ HUGGINGFACE
+  "hf_repo": "stabilityai/stable-diffusion-xl-base-1.0", // ตัวอย่าง SDXL base
+  "hf_path": "sd_xl_base_1.0.safetensors",               // พาธไฟล์ภายใน repo
+  "hf_token_env": "HF_TOKEN",                             // ชื่อ env var ที่เก็บ token (ถ้าไม่มีก็ปล่อยว่าง/ไม่ต้องตั้ง)
+
+  // สำหรับ DIRECT
+  "direct_url": "",                                       // ลิงก์ตรงไฟล์ .safetensors (ถ้าใช้ model_source=DIRECT)
+
+  // ===== พารามิเตอร์การเจนภาพ =====
+  "gen_width": 1024,                     // ความกว้าง (พิกเซล, ควรหารด้วย 64 ลงตัว) เช่น 768/1024/1536/2048
+  "gen_height": 1024,                    // ความสูง (พิกเซล, ควรหารด้วย 64 ลงตัว)
+  "gen_steps": 28,                       // ขั้นตอนเดน้อยส์ (10–50 พบบ่อย)
+  "gen_cfg": 7.0,                        // CFG scale (3–9 พบบ่อย)
+  "sampler": "dpmpp_2m",                 // ชนิด sampler (เช่น "euler", "euler_a", "dpmpp_2m", "ddim")
+  "scheduler": "karras",                 // scheduler ("normal" | "karras" | "exponential")
+  "neg_prompt": "text, watermark, logo, signature, blurry, noisy", // เนกาทีฟดีฟอลต์ (แก้ได้)
+
+  // ===== อัปสเกล =====
+  "upscale": true,                       // true=อัปสเกล | false=ไม่อัป
+  "upscale_model": "RealESRGAN_x2plus",  // "RealESRGAN_x2plus" | "RealESRGAN_x4plus"
+  "upscale_scale": 2,                    // 2 หรือ 4 (ตามโมเดล/ต้องการ)
+  "output_suffix": "_2k",                // คำต่อท้ายชื่อไฟล์หลังอัป (เช่น "_2k" หรือ "_4k")
+
+  // ===== ตัวเลือกขั้นสูง เลือกใช้ได้ =====
+  "target_pixels": 0                     // ถ้า >0 จะ auto เลือก scale เพื่อใกล้จำนวนพิกเซลเป้าหมาย (เช่น 4194304=~4MP)
+                                         // ใส่ 0 = ปิดการคำนวณนี้
+}
