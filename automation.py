@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os, time, json, uuid, shutil, subprocess, random, re
 import requests
+from PIL import Image  # เพิ่มด้านบนของไฟล์
 from pathlib import Path
 from urllib.parse import quote
 from datetime import datetime
@@ -108,6 +109,31 @@ def fetch_images(pid, save_to:Path):
                         outp=save_to/filename; open(outp,"wb").write(r.content); saved.append(str(outp)); break
                 except: time.sleep(1)
     return saved
+
+def convert_image(src_path:str, fmt:str="jpg", quality:int=95) -> str:
+    """แปลงภาพเป็นฟอร์แมตที่ต้องการ; คืน path ใหม่"""
+    fmt = fmt.lower()
+    src = Path(src_path)
+    if fmt not in ("jpg", "jpeg", "png"):
+        return str(src)  # ไม่รู้จักฟอร์แมต -> ไม่แปลง
+
+    if fmt in ("jpg","jpeg"):
+        # แปลงเป็น JPG (RGB), ตัด alpha
+        dst = src.with_suffix(".jpg")
+        img = Image.open(src).convert("RGB")
+        img.save(dst, "JPEG", quality=int(quality))
+        return str(dst)
+
+    if fmt == "png":
+        # บังคับเป็น PNG (เผื่อกรณีอินพุตเป็น JPG)
+        dst = src.with_suffix(".png")
+        img = Image.open(src)
+        if img.mode in ("RGBA","P"):
+            img = img.convert("RGBA")  # คง alpha ถ้ามี
+        else:
+            img = img.convert("RGB")
+        img.save(dst, "PNG", compress_level=4)
+        return str(dst)
 
 # ====== Real-ESRGAN ======
 def upscale(src, dst, model_name, scale):
@@ -278,6 +304,10 @@ def main():
     OUT_SUFFIX = cfg.get("output_suffix", "_2k")
     TARGET_PIX = int(cfg.get("target_pixels", 0))
 
+    FINAL_FMT = (cfg.get("final_output_format","jpg") or "jpg").lower()
+    JPEG_QLT  = int(cfg.get("jpeg_quality", 95))
+    KEEP_TMP  = bool(cfg.get("keep_intermediate_png", False))
+
     done = []
     for i, it in enumerate(items, 1):
         if CANCEL_FLAG.exists():
@@ -306,16 +336,33 @@ def main():
 
         src = imgs[0]; base = Path(src).stem
 
-        # อัปสเกลตาม config
-        if UPSCALE:
-            dst = OUT_DIR / f"{base}{OUT_SUFFIX}.jpg"
-            upscale(src, str(dst), UPSCALE_MODEL, UPSCALE_SCALE)
-        else:
-            dst = OUT_DIR / f"{base}.jpg"
-            shutil.copy(src, dst)
+        # ... หลังได้ `src` จาก ComfyUI แล้ว
+        # 1) เลือกปลายทางอัปสเกลเป็น PNG เสมอ (เพื่อคงคุณภาพระหว่างทาง)
+        intermediate_png = OUT_DIR / f"{base}{OUT_SUFFIX}.png"
 
-        embed_meta(str(dst), title, kws)
-        print("  - saved:", dst)
+        if UPSCALE:
+            # อัปสเกลเขียนเป็น .png ชั่วคราว
+            upscale(src, str(intermediate_png), UPSCALE_MODEL, UPSCALE_SCALE)
+            work_path = str(intermediate_png)
+        else:
+            # ไม่อัปสเกล -> ใช้ไฟล์ต้นทาง (มาจาก ComfyUI ส่วนใหญ่เป็น .png)
+            work_path = src
+
+        # 2) แปลงเป็นปลายทางสุดท้ายตาม config
+        final_path = convert_image(work_path, FINAL_FMT, JPEG_QLT)  # ".jpg" หรือ ".png"
+
+        # 3) ฝัง metadata เฉพาะไฟล์สุดท้าย
+        embed_meta(final_path, title, kws)
+        print("  - saved:", final_path)
+
+        # 4) จัดการไฟล์ชั่วคราวตามต้องการ
+        if not KEEP_TMP:
+            # ลบ PNG ขั้นกลาง (ถ้าไฟล์สุดท้ายไม่ใช่ไฟล์เดียวกับมัน)
+            try:
+                if str(intermediate_png) != final_path and intermediate_png.exists():
+                    intermediate_png.unlink()
+            except: pass
+                
         done.append(it.get("rowId"))
         shutil.rmtree(tmp, ignore_errors=True)
 
